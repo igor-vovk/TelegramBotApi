@@ -4,9 +4,9 @@ import akka.actor._
 
 import scala.collection.mutable
 
-object PerChatMessageRouter {
+object PerChatMessageRouterActor {
 
-  def props(underlying: Props) = Props(classOf[PerChatMessageRouter], underlying)
+  def apply(underlying: Props) = Props(classOf[PerChatMessageRouterActor], underlying)
 
 }
 
@@ -15,7 +15,7 @@ object PerChatMessageRouter {
   *
   * @param props Child actor props
   */
-class PerChatMessageRouter(props: Props) extends Actor with ActorLogging {
+class PerChatMessageRouterActor(props: Props) extends Actor with ActorLogging {
 
   import context._
 

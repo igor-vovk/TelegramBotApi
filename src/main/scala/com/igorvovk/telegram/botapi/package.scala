@@ -9,14 +9,7 @@ package object botapi {
     Writes(s => JsString(s.name))
   )
 
-  def responseReads[T](implicit rds: Reads[T]): Reads[T] = Reads(jv => {
-    if ((jv \ "ok").validate[Boolean].getOrElse(false)) {
-      (jv \ "result").validate[T]
-    } else {
-      (jv \ "description").validate[String].flatMap(JsError.apply)
-    }
-  })
-
+  // INPUT ENTITIES
 
   // https://core.telegram.org/bots/api#user
   case class User(id: Long, first_name: String, last_name: Option[String], username: Option[String])
@@ -36,7 +29,9 @@ package object botapi {
 
   // https://core.telegram.org/bots/api#chat
   case class Chat(id: Long, `type`: ChatType, title: Option[String], username: Option[String],
-                  first_name: Option[String], last_name: Option[String])
+                  first_name: Option[String], last_name: Option[String]) {
+    lazy val sid: String = id.toString
+  }
   implicit val chatFmt = Json.format[Chat]
 
   // https://core.telegram.org/bots/api#audio
@@ -152,5 +147,46 @@ package object botapi {
     case a: ReplyKeyboardHide => replyKeyboardHideFmt.writes(a)
     case a: ForceReply => forceReplyFmt.writes(a)
   }
+
+  /// OUTPUT ENTITIES
+
+  type ParseMode = Symbol
+
+  object ParseMode {
+    val Html = 'HTML
+    val Markdown = 'Markdown
+  }
+
+  type ChatAction = Symbol
+
+  object ChatAction {
+    val Typing = 'typing
+    val UploadPhoto = 'upload_photo
+    val RecordVideo = 'record_video
+    val UploadVideo = 'upload_video
+    val RecordAudio = 'record_audio
+    val UploadAudio = 'upload_audio
+    val UploadDocument = 'upload_document
+    val FindLocation = 'find_location
+  }
+
+  sealed trait OutMessage
+  case class SendMessage(text: String, parse_mode: Option[ParseMode] = None,
+                         disable_web_page_preview: Option[Boolean] = None,
+                         disable_notification: Option[Boolean] = None, reply_to_message_id: Option[Long] = None,
+                         reply_markup: Option[ReplyMarkup] = None) extends OutMessage
+  implicit val sendMessageWrites = Json.writes[SendMessage]
+
+  case class ForwardMessage(from_chat_id: String, message_id: Long,
+                            disable_notification: Option[Boolean] = None) extends OutMessage
+  implicit val forwardMessageWrites = Json.writes[ForwardMessage]
+
+  case class SendLocation(latitude: Double, longitude: Double, disable_notification: Option[Boolean],
+                          reply_to_message_id: Option[Long] = None,
+                          reply_markup: Option[ReplyMarkup] = None) extends OutMessage
+  implicit val sendLocationWrites = Json.writes[SendLocation]
+
+  case class SendChatAction(action: ChatAction)
+  implicit val sendChatActionWrites = Json.writes[SendChatAction]
 
 }

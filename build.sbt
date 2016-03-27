@@ -11,8 +11,9 @@ libraryDependencies ++= {
   Seq(
     "com.typesafe.play" %% "play-json" % playVer,
     "com.typesafe.play" %% "play-ws" % playVer,
+    "com.typesafe.play" %% "play-logback" % playVer,
     "com.typesafe.akka" %% "akka-actor" % akkaVer,
-    "com.typesafe.akka" %% "akka-persistence" % akkaVer % "provided",
+    "com.typesafe.akka" %% "akka-persistence" % akkaVer,
     "org.scalatest" %% "scalatest" % "2.2.4" % "test"
   )
 }

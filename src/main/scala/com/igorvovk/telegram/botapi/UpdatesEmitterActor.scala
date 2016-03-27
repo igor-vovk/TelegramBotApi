@@ -13,7 +13,7 @@ object UpdatesEmitterActor {
 
   case class AddSubscriber(actor: ActorRef)
 
-  def props(client: TelegramApiClient) = Props(classOf[UpdatesEmitterActor], client)
+  def apply(client: TelegramApiClient) = Props(classOf[UpdatesEmitterActor], client)
 
 }
 

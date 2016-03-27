@@ -6,11 +6,10 @@ import akka.Done
 import akka.stream.scaladsl.Source
 import com.igorvovk.telegram.botapi.util.Funcs._
 import play.api.Logger
-import play.api.libs.json.{JsNull, JsObject, JsValue, Json}
+import play.api.libs.json._
 import play.api.libs.ws.{StreamedResponse, WSClient}
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.language.implicitConversions
 
 
 case class TelegramApiClientException(message: String) extends RuntimeException(message)
@@ -19,27 +18,13 @@ object TelegramApiClient {
 
   def error(msg: String): Nothing = throw new TelegramApiClientException(msg)
 
-  type ParseMode = Symbol
-
-  object ParseMode {
-    val Html = 'HTML
-    val Markdown = 'Markdown
-  }
-
-  type ChatAction = Symbol
-
-  object ChatAction {
-    val Typing = 'typing
-    val UploadPhoto = 'upload_photo
-    val RecordVideo = 'record_video
-    val UploadVideo = 'upload_video
-    val RecordAudio = 'record_audio
-    val UploadAudio = 'upload_audio
-    val UploadDocument = 'upload_document
-    val FindLocation = 'find_location
-  }
-
-  def filterNulls(obj: JsObject): JsObject = JsObject(obj.fields.filterNot(_._2 == JsNull))
+  def responseReads[T](implicit rds: Reads[T]): Reads[T] = Reads(jv => {
+    if ((jv \ "ok").validate[Boolean].getOrElse(false)) {
+      (jv \ "result").validate[T]
+    } else {
+      (jv \ "description").validate[String].flatMap(JsError.apply)
+    }
+  })
 
 }
 
@@ -49,6 +34,8 @@ class TelegramApiClient @Inject()(ws: WSClient,
   import TelegramApiClient._
 
   val log = Logger("application")
+
+  lazy val botId: Long = conf.credentials.id
 
   def getUpdates(offset: Option[Long] = None, limit: Option[Int] = None)
                 (implicit ec: ExecutionContext): Source[Update, _] = {
@@ -74,38 +61,6 @@ class TelegramApiClient @Inject()(ws: WSClient,
     ws.url(conf.apiBaseUrl + "/getMe").get().map(_.json.as(responseReads[User]))
   }
 
-  // https://core.telegram.org/bots/api#sendmessage
-  def sendMessage(chatId: String, text: String, parseMode: Option[ParseMode] = None,
-                  disableWebPagePreview: Option[Boolean] = None, disableNotification: Option[Boolean] = None,
-                  replyToMessageId: Option[Long] = None, replyMarkup: Option[ReplyMarkup] = None)
-                 (implicit ec: ExecutionContext): Future[Message] = {
-    val params = filterNulls(Json.obj(
-      "chat_id" -> chatId,
-      "text" -> text,
-      "parse_mode" -> parseMode.map(_.name),
-      "disable_web_page_preview" -> disableWebPagePreview,
-      "disable_notification" -> disableNotification,
-      "reply_to_message_id" -> replyToMessageId,
-      "reply_markup" -> replyMarkup
-    ))
-
-    ws.url(conf.apiBaseUrl + "/sendMessage").post(params).map(_.json.as(responseReads[Message]))
-  }
-
-  // https://core.telegram.org/bots/api#forwardmessage
-  def forwardMessage(chatId: String, fromChatId: String, messageId: Long,
-                     disableNotification: Option[Boolean] = None)
-                    (implicit ec: ExecutionContext): Future[Message] = {
-    val params = filterNulls(Json.obj(
-      "chat_id" -> chatId,
-      "from_chat_id" -> fromChatId,
-      "disable_notification" -> disableNotification,
-      "message_id" -> messageId
-    ))
-
-    ws.url(conf.apiBaseUrl + "/forwardMessage").post(params).map(_.json.as(responseReads[Message]))
-  }
-
   // https://core.telegram.org/bots/api#getfile
   def getFile(fileId: String)(implicit ec: ExecutionContext): Future[File] = {
     ws.url(conf.apiBaseUrl + "/getFile").withQueryString("file_id" -> fileId).execute("GET").map(_.json.as(responseReads[File]))
@@ -115,14 +70,35 @@ class TelegramApiClient @Inject()(ws: WSClient,
     ws.url(conf.downloadBaseUrl + "/" + file.file_path.get).withMethod("GET").stream()
   }
 
-  // https://core.telegram.org/bots/api#sendchataction
-  def sendChatAction(chatId: String, action: ChatAction)(implicit ec: ExecutionContext): Future[Done] = {
-    val params = Json.obj(
-      "chat_id" -> chatId,
-      "action" -> action.name
-    )
+  def send(chatId: String, text: String)(implicit ec: ExecutionContext): Future[Message] = {
+    send(chatId, SendMessage(text))
+  }
 
-    ws.url(conf.apiBaseUrl + "/sendChatAction").post(params).map(_.json.as(responseReads[JsValue])).map(_ => Done)
+  // https://core.telegram.org/bots/api#sendmessage
+  def send(chatId: String, o: OutMessage)(implicit ec: ExecutionContext): Future[Message] = {
+    o match {
+      case s: SendMessage => doSend[SendMessage, Message](chatId, s, "/sendMessage")
+      case f: ForwardMessage => doSend[ForwardMessage, Message](chatId, f, "/forwardMessage")
+      case l: SendLocation => doSend[SendLocation, Message](chatId, l, "/sendLocation")
+    }
+  }
+
+  // https://core.telegram.org/bots/api#sendchataction
+  def sendChatAction(chatId: String, c: SendChatAction)(implicit ec: ExecutionContext): Future[Done] = {
+    doSend[SendChatAction, JsValue](chatId, c, "/sendChatAction").map(_ => Done)
+  }
+
+  private def doSend[Req, Resp](chatId: String, req: Req, pathSuffix: String)
+                             (implicit ec: ExecutionContext, wr: OWrites[Req], rds: Reads[Resp]): Future[Resp] = {
+    val params = chatIdJson(chatId) ++ wr.writes(req)
+
+    ws.url(conf.apiBaseUrl + pathSuffix).post(params).map(_.json.as(responseReads[Resp]))
+  }
+
+  private def chatIdJson(chid: String): JsObject = {
+    Json.obj(
+      "chat_id" -> chid
+    )
   }
 
 }

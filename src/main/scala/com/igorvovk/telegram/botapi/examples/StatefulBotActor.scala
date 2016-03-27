@@ -1,50 +1,38 @@
 package com.igorvovk.telegram.botapi.examples
 
-import akka.actor.{ActorLogging, Cancellable, Props}
+import akka.actor.{ActorLogging, Cancellable, PoisonPill, Props}
 import akka.persistence._
-import com.igorvovk.telegram.botapi.{Chat, Message, TelegramApiClient}
-
-import scala.concurrent.duration._
-import scala.language.postfixOps
+import com.igorvovk.telegram.botapi.{Message, SendMessage}
 
 object StatefulBotActor {
 
-  def props(client: TelegramApiClient): Props = Props(classOf[StatefulBotActor], client)
+  def apply(): Props = Props(classOf[StatefulBotActor])
 
-  case class State(chat: Chat, receivedMessages: Int = 0)
-
-  case object TimeToSayGoodbye
+  case class State(receivedMessages: Int = 0)
 
 }
 
-class StatefulBotActor(client: TelegramApiClient) extends PersistentActor with ActorLogging {
+class StatefulBotActor extends PersistentActor with ActorLogging {
 
   import StatefulBotActor._
   import context._
 
-  val persistenceId: String = "stateful-bot-" + self.path.name
+  val persistenceId: String = "stateful-bot-" + parent.path.name
 
-  var state: State = _
+  var state: State = State()
   var shutdownTimer: Option[Cancellable] = None
 
   def receiveRecover = {
-    case SnapshotOffer(_, snapshot: State) => state = snapshot
+    case SnapshotOffer(_, snapshot: State) =>
+      state = snapshot.copy(receivedMessages = snapshot.receivedMessages + state.receivedMessages)
   }
 
   def receiveCommand = {
     case m: Message =>
-      if (null == state) {
-        state = State(m.chat)
-      }
-
       state = state.copy(receivedMessages = state.receivedMessages + 1)
 
-      client.sendMessage(state.chat.id.toString, "Received messages: " + state.receivedMessages).onFailure {
-        case e => log.error(e, "Error when sending message")
-      }
-
-      scheduleShutdown()
-    case TimeToSayGoodbye =>
+      sender() ! SendMessage("Received messages: " + state.receivedMessages)
+    case PoisonPill =>
       log.info("Actor {} shutdown", self.path)
 
       if (state != null) {
@@ -54,18 +42,5 @@ class StatefulBotActor(client: TelegramApiClient) extends PersistentActor with A
       stop(self)
     case SaveSnapshotSuccess(_) => // Do nothing
     case SaveSnapshotFailure(_, e) => log.error(e, "Can't save snapshot")
-  }
-
-  def scheduleShutdown(): Unit = {
-    val delay = 30 seconds
-
-    shutdownTimer.foreach(_.cancel())
-    shutdownTimer = Some(system.scheduler.scheduleOnce(delay, self, TimeToSayGoodbye))
-  }
-
-  override def postStop(): Unit = {
-    shutdownTimer.foreach(_.cancel())
-
-    super.postStop()
   }
 }
