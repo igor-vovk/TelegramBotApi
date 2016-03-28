@@ -1,8 +1,16 @@
 package com.igorvovk.telegram.botapi.examples
 
+import javax.inject.{Provider, Singleton}
+
 import akka.actor.{ActorLogging, Cancellable, PoisonPill, Props}
 import akka.persistence._
 import com.igorvovk.telegram.botapi.{Message, SendMessage}
+
+@Singleton
+class StatefulActorProvider extends Provider[Props] {
+  lazy val get = StatefulBotActor()
+}
+
 
 object StatefulBotActor {
 
@@ -32,15 +40,13 @@ class StatefulBotActor extends PersistentActor with ActorLogging {
       state = state.copy(receivedMessages = state.receivedMessages + 1)
 
       sender() ! SendMessage("Received messages: " + state.receivedMessages)
-    case PoisonPill =>
-      log.info("Actor {} shutdown", self.path)
+  }
 
-      if (state != null) {
-        saveSnapshot(state)
-      }
+  override def postStop(): Unit = {
+    log.info("Actor {} shutdown", self.path)
 
-      stop(self)
-    case SaveSnapshotSuccess(_) => // Do nothing
-    case SaveSnapshotFailure(_, e) => log.error(e, "Can't save snapshot")
+    if (state != null) {
+      saveSnapshot(state)
+    }
   }
 }

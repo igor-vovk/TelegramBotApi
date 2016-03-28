@@ -1,7 +1,14 @@
 package com.igorvovk.telegram.botapi.examples
 
+import javax.inject.{Provider, Singleton}
+
 import akka.actor.{Actor, Props}
 import com.igorvovk.telegram.botapi.{Message, SendMessage}
+
+@Singleton
+class HelloWorldBotProvider extends Provider[Props] {
+  lazy val get = HelloWorldActor()
+}
 
 object HelloWorldActor {
 
