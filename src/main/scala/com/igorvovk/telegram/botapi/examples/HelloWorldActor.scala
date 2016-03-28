@@ -7,13 +7,7 @@ import com.igorvovk.telegram.botapi.{Message, SendMessage}
 
 @Singleton
 class HelloWorldBotProvider extends Provider[Props] {
-  lazy val get = HelloWorldActor()
-}
-
-object HelloWorldActor {
-
-  def apply(): Props = Props(classOf[HelloWorldActor])
-
+  lazy val get = Props(classOf[HelloWorldActor])
 }
 
 class HelloWorldActor extends Actor {

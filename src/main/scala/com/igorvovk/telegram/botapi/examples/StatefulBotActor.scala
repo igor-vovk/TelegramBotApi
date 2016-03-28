@@ -8,13 +8,11 @@ import com.igorvovk.telegram.botapi.{Message, SendMessage}
 
 @Singleton
 class StatefulActorProvider extends Provider[Props] {
-  lazy val get = StatefulBotActor()
+  lazy val get = Props(classOf[StatefulBotActor])
 }
 
 
 object StatefulBotActor {
-
-  def apply(): Props = Props(classOf[StatefulBotActor])
 
   case class State(receivedMessages: Int = 0)
 
@@ -28,7 +26,6 @@ class StatefulBotActor extends PersistentActor with ActorLogging {
   val persistenceId: String = "stateful-bot-" + parent.path.name
 
   var state: State = State()
-  var shutdownTimer: Option[Cancellable] = None
 
   def receiveRecover = {
     case SnapshotOffer(_, snapshot: State) =>
