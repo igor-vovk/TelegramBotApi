@@ -5,10 +5,13 @@ import com.igorvovk.telegram.botapi.{TelegramApiClientConfiguration, TelegramApi
 import play.api.inject._
 import play.api.inject.guice.GuiceApplicationBuilder
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+
 
 object Application extends App {
 
-  GuiceApplicationBuilder()
+  val app = GuiceApplicationBuilder()
     .bindings(
       bind[TelegramApiClientConfiguration].toProvider[TelegramApiClientConfigurationProvider],
       bind[RunnerConfiguration].toProvider[RunnerConfigurationProvider],
@@ -16,5 +19,10 @@ object Application extends App {
       bind[Bootstrap].toSelf.eagerly()
     )
     .build()
+
+  sys.addShutdownHook {
+    println("Stopping application...")
+    Await.result(app.stop(), Duration.Inf)
+  }
 
 }
